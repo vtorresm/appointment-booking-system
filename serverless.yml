@@ -1,0 +1,179 @@
+service: medical-appointment-backend
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: us-east-1  # Cambia según sea necesario
+  environment:
+    DYNAMODB_TABLE: Appointments
+    SNS_TOPIC_PE: arn:aws:sns:${self:provider.region}:${aws:accountId}:AppointmentTopic-PE  # ARN dinámico
+    SNS_TOPIC_CL: arn:aws:sns:${self:provider.region}:${aws:accountId}:AppointmentTopic-CL
+    SQS_PE: https://sqs.${self:provider.region}.amazonaws.com/${aws:accountId}/SQS_PE
+    SQS_CL: https://sqs.${self:provider.region}.amazonaws.com/${aws:accountId}/SQS_CL
+    CONFIRMATION_SQS: https://sqs.${self:provider.region}.amazonaws.com/${aws:accountId}/ConfirmationSQS
+    EVENTBRIDGE_BUS: custom-event-bus
+    RDS_HOST: your-rds-host.rds.amazonaws.com  # Reemplaza con el real
+    RDS_USER: your-db-user
+    RDS_PASSWORD: ${ssm:/path/to/rds/password~true}  # Usa SSM para secretos
+    RDS_DATABASE: medical_appointments
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:Query
+      Resource: arn:aws:dynamodb:${self:provider.region}:${aws:accountId}:table/${self:provider.environment.DYNAMODB_TABLE}
+    - Effect: Allow
+      Action:
+        - sns:Publish
+      Resource: "*"
+    - Effect: Allow
+      Action:
+        - sqs:SendMessage
+        - sqs:ReceiveMessage
+        - sqs:DeleteMessage
+      Resource: "*"
+    - Effect: Allow
+      Action:
+        - events:PutEvents
+      Resource: "*"
+
+plugins:
+  - serverless-openapi-documentation
+  - serverless-offline
+
+custom:
+  documentation:
+    api:
+      info:
+        version: '1.0.0'
+        title: Medical Appointment API
+        description: Backend para agendamiento de citas médicas
+
+functions:
+  appointmentPost:
+    handler: src/handlers/appointment.postHandler
+    events:
+      - http:
+          path: /appointment
+          method: post
+          documentation:
+            summary: Registrar una solicitud de cita
+            requestBody:
+              description: Datos de la cita
+              required: true
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    properties:
+                      insuredId: { type: string }
+                      scheduleId: { type: number }
+                      countryISO: { type: string }
+  appointmentGet:
+    handler: src/handlers/appointment.getHandler
+    events:
+      - http:
+          path: /appointments/{insuredId}
+          method: get
+          documentation:
+            summary: Listar citas por insuredId
+            pathParams:
+              - name: insuredId
+                required: true
+                schema:
+                  type: string
+  appointmentProcessPE:
+    handler: src/handlers/appointmentPE.handler
+    events:
+      - sqs:
+          arn: arn:aws:sqs:${self:provider.region}:${aws:accountId}:SQS_PE
+  appointmentProcessCL:
+    handler: src/handlers/appointmentCL.handler
+    events:
+      - sqs:
+          arn: arn:aws:sqs:${self:provider.region}:${aws:accountId}:SQS_CL
+  appointmentConfirm:
+    handler: src/handlers/appointment.confirmHandler
+    events:
+      - sqs:
+          arn: arn:aws:sqs:${self:provider.region}:${aws:accountId}:ConfirmationSQS
+
+resources:
+  Resources:
+    AppointmentsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: insuredId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: InsuredIdIndex
+            KeySchema:
+              - AttributeName: insuredId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        BillingMode: PAY_PER_REQUEST
+    AppointmentTopicPE:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: AppointmentTopic-PE
+    AppointmentTopicCL:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: AppointmentTopic-CL
+    SQSPe:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: SQS_PE
+    SubscriptionPE:
+      Type: AWS::SNS::Subscription
+      Properties:
+        TopicArn: !Ref AppointmentTopicPE
+        Endpoint: !GetAtt SQSPe.Arn
+        Protocol: sqs
+    SQSCl:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: SQS_CL
+    SubscriptionCL:
+      Type: AWS::SNS::Subscription
+      Properties:
+        TopicArn: !Ref AppointmentTopicCL
+        Endpoint: !GetAtt SQSCl.Arn
+        Protocol: sqs
+    ConfirmationSQS:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ConfirmationSQS
+    EventBus:
+      Type: AWS::Events::EventBus
+      Properties:
+        Name: ${self:provider.environment.EVENTBRIDGE_BUS}
+    EventRulePE:
+      Type: AWS::Events::Rule
+      Properties:
+        EventBusName: !Ref EventBus
+        EventPattern:
+          source: ["appointment.pe"]
+        Targets:
+          - Arn: !GetAtt ConfirmationSQS.Arn
+            Id: ConfirmationTarget
+    EventRuleCL:
+      Type: AWS::Events::Rule
+      Properties:
+        EventBusName: !Ref EventBus
+        EventPattern:
+          source: ["appointment.cl"]
+        Targets:
+          - Arn: !GetAtt ConfirmationSQS.Arn
+            Id: ConfirmationTarget

@@ -1,0 +1,131 @@
+openapi: 3.0.0
+info:
+  title: Medical Appointment API
+  description: Backend para agendamiento de citas médicas en Perú y Chile utilizando AWS. Permite registrar solicitudes de citas y listarlas por ID de asegurado.
+  version: 1.0.0
+servers:
+  - url: https://{api_id}.execute-api.{region}.amazonaws.com/{stage}  # Reemplaza con la URL real de API Gateway después del deploy
+    variables:
+      api_id:
+        default: example-api-id
+      region:
+        default: us-east-1
+      stage:
+        default: dev
+paths:
+  /appointment:
+    post:
+      summary: Registrar una solicitud de cita médica
+      description: Recibe los datos de la cita y inicia el proceso de agendamiento, guardando en DynamoDB y enviando a SNS.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppointmentRequest'
+      responses:
+        '200':
+          description: Solicitud de cita registrada exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Agendamiento en proceso"
+        '400':
+          description: Error de validación o entrada inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /appointments/{insuredId}:
+    get:
+      summary: Listar citas por ID de asegurado
+      description: Recupera la lista de citas asociadas a un asegurado específico, incluyendo su estado (pending/completed).
+      parameters:
+        - name: insuredId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^\d{5}$
+            example: "00001"
+          description: Código del asegurado de 5 dígitos
+      responses:
+        '200':
+          description: Lista de citas recuperada exitosamente
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Appointment'
+        '400':
+          description: Error de validación o entrada inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    AppointmentRequest:
+      type: object
+      required:
+        - insuredId
+        - scheduleId
+        - countryISO
+      properties:
+        insuredId:
+          type: string
+          pattern: ^\d{5}$
+          description: Código del asegurado de 5 dígitos (puede tener ceros al inicio)
+          example: "00001"
+        scheduleId:
+          type: number
+          description: Identificador del espacio de cita (centro médico, especialidad, médico, fecha y hora)
+          example: 100
+        countryISO:
+          type: string
+          enum: [PE, CL]
+          description: Código ISO del país (PE para Perú, CL para Chile)
+          example: "PE"
+    Appointment:
+      type: object
+      properties:
+        id:
+          type: string
+          description: ID único de la cita generado por UUID
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        insuredId:
+          type: string
+          example: "00001"
+        scheduleId:
+          type: number
+          example: 100
+        countryISO:
+          type: string
+          example: "PE"
+        status:
+          type: string
+          enum: [pending, completed]
+          description: Estado de la cita
+          example: "pending"
+        createdAt:
+          type: string
+          format: date-time
+          description: Fecha de creación
+          example: "2024-09-05T12:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Fecha de última actualización (opcional)
+          example: "2024-09-05T12:30:00Z"
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Mensaje de error
+          example: "Invalid insuredId"
