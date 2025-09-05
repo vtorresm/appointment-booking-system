@@ -4,7 +4,7 @@ frameworkVersion: '3'
 
 provider:
   name: aws
-  runtime: nodejs20.x
+  runtime: nodejs16.x
   region: us-east-1  # Cambia según sea necesario
   environment:
     DYNAMODB_TABLE: Appointments
@@ -16,7 +16,7 @@ provider:
     EVENTBRIDGE_BUS: custom-event-bus
     RDS_HOST: your-rds-host.rds.amazonaws.com  # Reemplaza con el real
     RDS_USER: your-db-user
-    RDS_PASSWORD: ${ssm:/path/to/rds/password~true}  # Usa SSM para secretos
+    RDS_PASSWORD: ${ssm:/medical-appointment/rds/password}  # Usa SSM para secretos
     RDS_DATABASE: medical_appointments
   iamRoleStatements:
     - Effect: Allow
@@ -41,16 +41,31 @@ provider:
       Resource: "*"
 
 plugins:
-  - serverless-openapi-documentation
   - serverless-offline
+  - serverless-openapi-documentation
+
+# Package configuration
+package:
+  patterns:
+    - '!**/*'
+    - 'src/**'
+    - 'node_modules/**'
+    - '!node_modules/aws-sdk/**'
+    - '!node_modules/typescript/**'
 
 custom:
   documentation:
     api:
       info:
-        version: '1.0.0'
         title: Medical Appointment API
+        version: 1.0.0
         description: Backend para agendamiento de citas médicas
+  serverless-offline:
+    httpPort: 3000
+    lambdaPort: 3002
+    noPrependStageInUrl: true
+    useChildProcesses: true
+    noAuth: true
 
 functions:
   appointmentPost:
@@ -59,32 +74,12 @@ functions:
       - http:
           path: /appointment
           method: post
-          documentation:
-            summary: Registrar una solicitud de cita
-            requestBody:
-              description: Datos de la cita
-              required: true
-              content:
-                application/json:
-                  schema:
-                    type: object
-                    properties:
-                      insuredId: { type: string }
-                      scheduleId: { type: number }
-                      countryISO: { type: string }
   appointmentGet:
     handler: src/handlers/appointment.getHandler
     events:
       - http:
           path: /appointments/{insuredId}
           method: get
-          documentation:
-            summary: Listar citas por insuredId
-            pathParams:
-              - name: insuredId
-                required: true
-                schema:
-                  type: string
   appointmentProcessPE:
     handler: src/handlers/appointmentPE.handler
     events:

@@ -7,11 +7,33 @@ import { Appointment, AppointmentRequest } from '../models/appointment';
 import { DynamoRepository } from '../repositories/dynamoRepository';
 import { RdsRepository } from '../repositories/rdsRepository';
 
-const snsClient = new SNSClient({});
-const ebClient = new EventBridgeClient({});
+const IS_OFFLINE = process.env.IS_OFFLINE === 'true';
+
+const snsClient = new SNSClient({
+  region: 'us-east-1',
+  ...(IS_OFFLINE && {
+    endpoint: 'http://localhost:4002',
+    credentials: {
+      accessKeyId: 'local',
+      secretAccessKey: 'local',
+    },
+  }),
+});
+
+const ebClient = new EventBridgeClient({
+  region: 'us-east-1',
+  ...(IS_OFFLINE && {
+    endpoint: 'http://localhost:4002',
+    credentials: {
+      accessKeyId: 'local',
+      secretAccessKey: 'local',
+    },
+  }),
+});
+
 const dynamoRepo = new DynamoRepository();
 const rdsRepo = new RdsRepository();
-const EVENT_BUS_NAME = process.env.EVENTBRIDGE_BUS!;
+const EVENT_BUS_NAME = process.env.EVENTBRIDGE_BUS || 'custom-event-bus';
 
 export class AppointmentService {
   async register(request: AppointmentRequest): Promise<{ message: string }> {
