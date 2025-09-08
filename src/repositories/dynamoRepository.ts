@@ -8,7 +8,18 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import { Appointment, AppointmentRequest } from '../models/appointment';
 
-const client = new DynamoDBClient({});
+const IS_OFFLINE = process.env.IS_OFFLINE === 'true';
+
+const client = new DynamoDBClient({
+  region: 'us-east-1',
+  ...(IS_OFFLINE && {
+    endpoint: 'http://localhost:8000',
+    credentials: {
+      accessKeyId: 'local',
+      secretAccessKey: 'local',
+    },
+  }),
+});
 const docClient = DynamoDBDocumentClient.from(client);
 const TABLE_NAME = process.env.DYNAMODB_TABLE!;
 

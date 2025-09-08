@@ -1,10 +1,10 @@
 service: medical-appointment-backend
 
-frameworkVersion: '3'
+frameworkVersion: '4'
 
 provider:
   name: aws
-  runtime: nodejs16.x
+  runtime: nodejs20.x
   region: us-east-1  # Cambia según sea necesario
   environment:
     DYNAMODB_TABLE: Appointments
@@ -14,8 +14,8 @@ provider:
     SQS_CL: https://sqs.${self:provider.region}.amazonaws.com/${aws:accountId}/SQS_CL
     CONFIRMATION_SQS: https://sqs.${self:provider.region}.amazonaws.com/${aws:accountId}/ConfirmationSQS
     EVENTBRIDGE_BUS: custom-event-bus
-    RDS_HOST: your-rds-host.rds.amazonaws.com  # Reemplaza con el real
-    RDS_USER: your-db-user
+    RDS_HOST: cita-medica.cuv22sy26rkm.us-east-1.rds.amazonaws.com
+    RDS_USER: admin
     RDS_PASSWORD: ${ssm:/medical-appointment/rds/password}  # Usa SSM para secretos
     RDS_DATABASE: medical_appointments
   iamRoleStatements:
@@ -43,6 +43,7 @@ provider:
 plugins:
   - serverless-offline
   - serverless-openapi-documentation
+  - serverless-dynamodb-local
 
 # Package configuration
 package:
@@ -66,10 +67,19 @@ custom:
     noPrependStageInUrl: true
     useChildProcesses: true
     noAuth: true
+  dynamodb:
+    start:
+      port: 8000
+      inMemory: true
+      migrate: true
+      javaPath: 'C:\Program Files\Amazon Corretto\jdk21.0.8_9\bin\java.exe' # Ruta explícita a Java
+    stages:
+      - dev
 
 functions:
   appointmentPost:
     handler: src/handlers/appointment.postHandler
+    timeout: 60 # Aumentado a 60 segundos
     events:
       - http:
           path: /appointment

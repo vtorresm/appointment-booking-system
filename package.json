@@ -20,12 +20,13 @@
     "uuid": "^11.1.0"
   },
   "devDependencies": {
-    "@serverless/utils": "^3.0.0",
+    "@serverless/utils": "^6.15.0",
     "@types/aws-lambda": "^8.10.152",
     "@types/jest": "^27.0.0",
     "@types/node": "^24.3.1",
     "jest": "^27.0.0",
-    "serverless-offline": "^8.5.0",
+    "serverless-dynamodb-local": "^0.2.40",
+    "serverless-offline": "^14.4.0",
     "serverless-openapi-documentation": "^0.4.0",
     "ts-jest": "^27.1.5",
     "ts-node": "^10.9.2",
