@@ -1,4 +1,4 @@
-import { APIGatewayProxyHandler } from 'aws-lambda';
+import { APIGatewayProxyHandler, SQSHandler } from 'aws-lambda';
 import { AppointmentService } from '../services/appointmentService';
 
 const service = new AppointmentService();
@@ -23,10 +23,9 @@ export const getHandler: APIGatewayProxyHandler = async (event) => {
   }
 };
 
-export const confirmHandler: APIGatewayProxyHandler = async (event) => {
+export const confirmHandler: SQSHandler = async (event) => {
   for (const record of event.Records) {
     const { id } = JSON.parse(record.body);
     await service.confirm(id);
   }
-  return { statusCode: 200 };
 };

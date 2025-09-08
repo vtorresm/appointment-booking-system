@@ -12,6 +12,7 @@
   "include": [
     "src/**/*"
   ],
+  "lib": ["esnext", "esnext.disposable", "dom"],
   "exclude": [
     "node_modules"
   ]

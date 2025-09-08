@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      DYNAMODB_ENDPOINT: http://dynamodb:8000
+    depends_on:
+      - dynamodb
+
+  dynamodb:
+    image: amazon/dynamodb-local
+    ports:
+      - "8000:8000"
+    volumes:
+      - dynamodb_data:/home/dynamodblocal/data
+      - C:/Users/victo/.serverless:/root/.serverless

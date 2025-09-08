@@ -72,7 +72,7 @@ custom:
       port: 8000
       inMemory: true
       migrate: true
-      javaPath: 'C:\Program Files\Amazon Corretto\jdk21.0.8_9\bin\java.exe' # Ruta explícita a Java
+      javaPath: 'C:\jdk17.0.16_8\bin\java.exe' # Ruta explícita a Java
     stages:
       - dev
 
