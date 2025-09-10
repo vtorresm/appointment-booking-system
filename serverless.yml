@@ -24,7 +24,9 @@ provider:
         - dynamodb:PutItem
         - dynamodb:UpdateItem
         - dynamodb:Query
-      Resource: arn:aws:dynamodb:${self:provider.region}:${aws:accountId}:table/${self:provider.environment.DYNAMODB_TABLE}
+      Resource:
+        - arn:aws:dynamodb:${self:provider.region}:${aws:accountId}:table/${self:provider.environment.DYNAMODB_TABLE}
+        - arn:aws:dynamodb:${self:provider.region}:${aws:accountId}:table/${self:provider.environment.DYNAMODB_TABLE}/index/InsuredIdIndex
     - Effect: Allow
       Action:
         - sns:Publish
