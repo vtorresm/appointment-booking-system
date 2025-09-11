@@ -5,11 +5,15 @@ const service = new AppointmentService();
 
 export const postHandler: APIGatewayProxyHandler = async (event) => {
   try {
+    console.log('Evento recibido:', JSON.stringify(event));
     const request = JSON.parse(event.body!);
+    console.log('Request parseado:', JSON.stringify(request));
     const result = await service.register(request);
+    console.log('Resultado:', JSON.stringify(result));
     return { statusCode: 200, body: JSON.stringify(result) };
   } catch (error: any) {
-    return { statusCode: 400, body: JSON.stringify({ error: error.message }) };
+    console.error('Error en postHandler:', error);
+    return { statusCode: 500, body: JSON.stringify({ error: error.message || 'Error interno del servidor' }) };
   }
 };
 
@@ -24,8 +28,17 @@ export const getHandler: APIGatewayProxyHandler = async (event) => {
 };
 
 export const confirmHandler: SQSHandler = async (event) => {
-  for (const record of event.Records) {
-    const { id } = JSON.parse(record.body);
-    await service.confirm(id);
+  try {
+    console.log('Evento SQS recibido en confirmHandler:', JSON.stringify(event));
+    for (const record of event.Records) {
+      console.log('Procesando registro:', record.body);
+      const { body } = JSON.parse(record.body);
+      console.log('Body extraído:', JSON.stringify(body));
+      await service.confirm(body.id);
+      console.log('Cita confirmada con ID:', body.id);
+    }
+  } catch (error) {
+    console.error('Error en confirmHandler:', error);
+    throw error;
   }
 };

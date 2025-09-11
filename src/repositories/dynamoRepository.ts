@@ -67,4 +67,15 @@ export class DynamoRepository {
     );
     return (result.Items as Appointment[]) || [];
   }
+
+  async getById(id: string): Promise<Appointment | null> {
+    const result = await docClient.send(
+      new QueryCommand({
+        TableName: TABLE_NAME,
+        KeyConditionExpression: 'id = :id',
+        ExpressionAttributeValues: { ':id': id },
+      })
+    );
+    return result.Items?.[0] as Appointment || null;
+  }
 }

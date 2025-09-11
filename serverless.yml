@@ -5,103 +5,114 @@ frameworkVersion: '4'
 provider:
   name: aws
   runtime: nodejs20.x
-  region: us-east-1  # Cambia según sea necesario
+  region: us-east-1
+  timeout: 60 # Aumentado a 60 segundos para manejar conexiones lentas a RDS
   environment:
     DYNAMODB_TABLE: Appointments
-    SNS_TOPIC_PE: arn:aws:sns:${self:provider.region}:${aws:accountId}:AppointmentTopic-PE  # ARN dinámico
-    SNS_TOPIC_CL: arn:aws:sns:${self:provider.region}:${aws:accountId}:AppointmentTopic-CL
-    SQS_PE: https://sqs.${self:provider.region}.amazonaws.com/${aws:accountId}/SQS_PE
-    SQS_CL: https://sqs.${self:provider.region}.amazonaws.com/${aws:accountId}/SQS_CL
-    CONFIRMATION_SQS: https://sqs.${self:provider.region}.amazonaws.com/${aws:accountId}/ConfirmationSQS
+    SNS_TOPIC_PE: arn:aws:sns:${self:provider.region}:324093102870:AppointmentTopic-PE
+    SNS_TOPIC_CL: arn:aws:sns:${self:provider.region}:324093102870:AppointmentTopic-CL
+    SQS_PE: https://sqs.${self:provider.region}.amazonaws.com/324093102870/SQS_PE
+    SQS_CL: https://sqs.${self:provider.region}.amazonaws.com/324093102870/SQS_CL
+    CONFIRMATION_SQS: https://sqs.${self:provider.region}.amazonaws.com/324093102870/ConfirmationSQS
     EVENTBRIDGE_BUS: custom-event-bus
     RDS_HOST: cita-medica.cuv22sy26rkm.us-east-1.rds.amazonaws.com
     RDS_USER: admin
-    RDS_PASSWORD: ${ssm:/medical-appointment/rds/password}  # Usa SSM para secretos
+    RDS_PASSWORD: test1234
     RDS_DATABASE: medical_appointments
   iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+        - ssm:GetParameters
+      Resource: 
+        - arn:aws:ssm:${self:provider.region}:324093102870:parameter/medical-appointment/*
     - Effect: Allow
       Action:
         - dynamodb:PutItem
         - dynamodb:UpdateItem
         - dynamodb:Query
+        - dynamodb:GetItem
       Resource:
-        - arn:aws:dynamodb:${self:provider.region}:${aws:accountId}:table/${self:provider.environment.DYNAMODB_TABLE}
-        - arn:aws:dynamodb:${self:provider.region}:${aws:accountId}:table/${self:provider.environment.DYNAMODB_TABLE}/index/InsuredIdIndex
+        - arn:aws:dynamodb:${self:provider.region}:324093102870:table/${self:provider.environment.DYNAMODB_TABLE}
+        - arn:aws:dynamodb:${self:provider.region}:324093102870:table/${self:provider.environment.DYNAMODB_TABLE}/index/InsuredIdIndex
     - Effect: Allow
       Action:
         - sns:Publish
-      Resource: "*"
+      Resource: 
+        - arn:aws:sns:${self:provider.region}:324093102870:AppointmentTopic-PE
+        - arn:aws:sns:${self:provider.region}:324093102870:AppointmentTopic-CL
     - Effect: Allow
       Action:
         - sqs:SendMessage
         - sqs:ReceiveMessage
         - sqs:DeleteMessage
-      Resource: "*"
+        - sqs:GetQueueUrl
+      Resource:
+        - arn:aws:sqs:${self:provider.region}:324093102870:SQS_PE
+        - arn:aws:sqs:${self:provider.region}:324093102870:SQS_CL
+        - arn:aws:sqs:${self:provider.region}:324093102870:ConfirmationSQS
     - Effect: Allow
       Action:
         - events:PutEvents
+      Resource: 
+        - arn:aws:events:${self:provider.region}:324093102870:event-bus/${self:provider.environment.EVENTBRIDGE_BUS}
+    - Effect: Allow
+      Action:
+        - ec2:CreateNetworkInterface
+        - ec2:DescribeNetworkInterfaces
+        - ec2:DeleteNetworkInterface
+        - ec2:DescribeSecurityGroups
+        - ec2:DescribeSubnets
+        - ec2:DescribeVpcs
       Resource: "*"
-
-plugins:
-  - serverless-offline
-  - serverless-openapi-documentation
-  - serverless-dynamodb-local
-
-# Package configuration
-package:
-  patterns:
-    - '!**/*'
-    - 'src/**'
-    - 'node_modules/**'
-    - '!node_modules/aws-sdk/**'
-    - '!node_modules/typescript/**'
-
-custom:
-  documentation:
-    api:
-      info:
-        title: Medical Appointment API
-        version: 1.0.0
-        description: Backend para agendamiento de citas médicas
-  serverless-offline:
-    httpPort: 3000
-    lambdaPort: 3002
-    noPrependStageInUrl: true
-    useChildProcesses: true
-    noAuth: true
-  dynamodb:
-    start:
-      port: 8000
-      inMemory: true
-      migrate: true
-      javaPath: 'C:\jdk17.0.16_8\bin\java.exe' # Ruta explícita a Java
-    stages:
-      - dev
 
 functions:
   appointmentPost:
     handler: src/handlers/appointment.postHandler
-    timeout: 60 # Aumentado a 60 segundos
     events:
       - http:
           path: /appointment
           method: post
+          cors: true
   appointmentGet:
     handler: src/handlers/appointment.getHandler
     events:
       - http:
           path: /appointments/{insuredId}
           method: get
+          cors: true
   appointmentProcessPE:
     handler: src/handlers/appointmentPE.handler
+    timeout: 60 # aumentado para manejar conexiones lentas a RDS
+    memorySize: 256 # aumentar memoria para mejorar CPU
+    vpc:
+      securityGroupIds:
+        - sg-0aa6390268ffbf9af  # Security Group de Lambda
+      subnetIds:
+        - subnet-030fe3d93ecc5d5a4  # Subnet en us-east-1a
+        - subnet-01ae296dc0bf1c1c1  # Subnet en us-east-1e
+        - subnet-023717d1d383ac46b  # Subnet en us-east-1b
     events:
       - sqs:
           arn: arn:aws:sqs:${self:provider.region}:${aws:accountId}:SQS_PE
+          batchSize: 3 # reducir el número de mensajes procesados en paralelo
+          maximumBatchingWindow: 10 # esperar hasta 10 segundos para agrupar mensajes
   appointmentProcessCL:
     handler: src/handlers/appointmentCL.handler
+    timeout: 60 # aumentado para manejar conexiones lentas a RDS
+    memorySize: 256
+    vpc:
+      securityGroupIds:
+        - sg-0aa6390268ffbf9af  # Security Group de Lambda
+      subnetIds:
+        - subnet-030fe3d93ecc5d5a4  # Subnet en us-east-1a
+        - subnet-01ae296dc0bf1c1c1  # Subnet en us-east-1e
+        - subnet-023717d1d383ac46b  # Subnet en us-east-1b
     events:
       - sqs:
           arn: arn:aws:sqs:${self:provider.region}:${aws:accountId}:SQS_CL
+          batchSize: 3
+          maximumBatchingWindow: 10
   appointmentConfirm:
     handler: src/handlers/appointment.confirmHandler
     events:
@@ -142,26 +153,84 @@ resources:
       Type: AWS::SQS::Queue
       Properties:
         QueueName: SQS_PE
+        VisibilityTimeout: 60 # Aumentar el visibility timeout para evitar reprocesamiento
+        MessageRetentionPeriod: 86400 # 1 día de retención
+    SQSPePolicy:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        Queues: 
+          - !Ref SQSPe
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: sns.amazonaws.com
+              Action: sqs:SendMessage
+              Resource: !GetAtt SQSPe.Arn
+              Condition:
+                ArnEquals:
+                  aws:SourceArn: !Ref AppointmentTopicPE
     SubscriptionPE:
       Type: AWS::SNS::Subscription
       Properties:
         TopicArn: !Ref AppointmentTopicPE
-        Endpoint: !GetAtt SQSPe.Arn
         Protocol: sqs
+        Endpoint: !GetAtt SQSPe.Arn
     SQSCl:
       Type: AWS::SQS::Queue
       Properties:
         QueueName: SQS_CL
+        VisibilityTimeout: 60
+        MessageRetentionPeriod: 86400
+    SQSClPolicy:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        Queues: 
+          - !Ref SQSCl
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: sns.amazonaws.com
+              Action: sqs:SendMessage
+              Resource: !GetAtt SQSCl.Arn
+              Condition:
+                ArnEquals:
+                  aws:SourceArn: !Ref AppointmentTopicCL
     SubscriptionCL:
       Type: AWS::SNS::Subscription
       Properties:
         TopicArn: !Ref AppointmentTopicCL
-        Endpoint: !GetAtt SQSCl.Arn
         Protocol: sqs
+        Endpoint: !GetAtt SQSCl.Arn
     ConfirmationSQS:
       Type: AWS::SQS::Queue
       Properties:
         QueueName: ConfirmationSQS
+        VisibilityTimeout: 60
+        MessageRetentionPeriod: 86400
+    ConfirmationSQSPolicy:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        Queues: 
+          - !Ref ConfirmationSQS
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: events.amazonaws.com
+              Action: 
+                - sqs:SendMessage
+                - sqs:GetQueueUrl
+              Resource: !GetAtt ConfirmationSQS.Arn
+              Condition:
+                ArnLike:
+                  aws:SourceArn:
+                    - !GetAtt EventRulePE.Arn
+                    - !GetAtt EventRuleCL.Arn
     EventBus:
       Type: AWS::Events::EventBus
       Properties:
@@ -172,15 +241,35 @@ resources:
         EventBusName: !Ref EventBus
         EventPattern:
           source: ["appointment.pe"]
+          detail-type: ["AppointmentConfirmed"]
+        State: ENABLED
         Targets:
           - Arn: !GetAtt ConfirmationSQS.Arn
-            Id: ConfirmationTarget
+            Id: ConfirmationTargetPE
+            RetryPolicy:
+              MaximumRetryAttempts: 3
+              MaximumEventAgeInSeconds: 300
+            InputTransformer:
+              InputPathsMap:
+                id: "$.detail.id"
+                status: "$.detail.status"
+              InputTemplate: "{\"body\": {\"id\": <id>, \"status\": <status>}}"
     EventRuleCL:
       Type: AWS::Events::Rule
       Properties:
         EventBusName: !Ref EventBus
         EventPattern:
           source: ["appointment.cl"]
+          detail-type: ["AppointmentConfirmed"]
+        State: ENABLED
         Targets:
           - Arn: !GetAtt ConfirmationSQS.Arn
-            Id: ConfirmationTarget
+            Id: ConfirmationTargetCL
+            RetryPolicy:
+              MaximumRetryAttempts: 3
+              MaximumEventAgeInSeconds: 300
+            InputTransformer:
+              InputPathsMap:
+                id: "$.detail.id"
+                status: "$.detail.status"
+              InputTemplate: "{\"body\": {\"id\": <id>, \"status\": <status>}}"

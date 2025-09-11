@@ -1,6 +1,8 @@
 export interface AppointmentRequest {
   insuredId: string;
-  scheduleId: number;
+  scheduleId?: number; // Optional porque puede venir date+time en su lugar
+  date?: string;
+  time?: string;  
   countryISO: 'PE' | 'CL';
 }
 
